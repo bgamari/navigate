@@ -5,6 +5,14 @@ from time import time, sleep
 import serial
 import logging
 from numpy import copysign, abs
+import threading
+
+import pynotify
+pynotify.init('z control')
+
+def notify(title, message=''):
+        n = pynotify.Notification(title, message)
+        n.show()
 
 def find_device():
         from glob import glob
@@ -17,10 +25,6 @@ def find_device():
                 logging.info("Found device %s (%x:%x)" % (dev, devid.vendor, devid.product))
                 if (devid.vendor, devid.product) in known_devices:
                         return e
-
-import threading
-
-        
 
 if __name__ == '__main__':
         s = serial.Serial('/dev/ttyACM0', baudrate=115200)
@@ -58,9 +62,11 @@ if __name__ == '__main__':
                         stopped = not stopped
                         if stopped:
                                 print "Stopped"
+                                notify('Z joystick disabled')
                         else:
                                 stop = False
                                 thrd = threading.Thread(target=update_loop)
                                 thrd.setDaemon(True)
                                 thrd.start()
                                 print "Started"
+                                notify('Z joystick enabled')
