@@ -27,11 +27,16 @@ def find_device():
                         return e
 
 if __name__ == '__main__':
-        s = serial.Serial('/dev/ttyACM0', baudrate=115200)
+        from argparse import ArgumentParser
+        parser = ArgumentParser()
+        parser.add_argument('-p', '--port', type=file, help='Serial port of Arduino')
+        args = parser.parse_args()
+
+        s = serial.Serial(args.port.name, baudrate=115200)
         s.write('rate 1000\n')
 
         invert = True
-        gain = 5e-0
+        gain = 5e-1
         velocity = 0
         stopped = True
         def update_loop():
