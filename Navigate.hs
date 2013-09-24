@@ -8,11 +8,13 @@ import Control.Lens
 import Control.Applicative
 import Data.Int
 import Linear
-import qualified MercuryController as MM
 import Control.Monad (forever)
 import Control.Monad.State
 import Data.Traversable as T
 import Data.Foldable as F
+
+import qualified MercuryController as MM
+import qualified ZMotor as Z
 
 newtype Position = Pos Int
                  deriving (Show, Eq, Ord, Num, Integral, Real, Enum)
@@ -105,11 +107,14 @@ main = do
             MM.moveAbs bus (MM.Pos $ fromIntegral n)
             putStrLn $ "Move "++show axis++" to "++show n
 
+    zMotor <- Z.open "/dev/ttyACM0"
+    let moveZStage (Pos n) = Z.move zMotor (n `div` 10)
+
     forkIO $ forever $ threadDelay 1000000 >> enqueue reportPositions
     navAxes <- T.sequence $ V3
                  (newNavAxis updateRate (moveStage (axes ^. _x)) (initial ^. _x))
                  (newNavAxis updateRate (moveStage (axes ^. _y)) (initial ^. _y))
-                 (newNavAxis updateRate (const $ return ()) 0)
+                 (newNavAxis updateRate  moveZStage               0)
 
     joystick <- openFile "/dev/input/event4" ReadMode
     listenEvDev joystick navAxes
