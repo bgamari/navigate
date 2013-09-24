@@ -66,7 +66,7 @@ listenEvDev h navAxes =
     update :: StateT (V3 Int32) IO ()
     update = void $ T.sequence $ core $ \l->do
         v <- uses l realToFrac
-        lift $ modifyMVar_ (navAxes ^. l) (return . (velocity .~ v))
+        lift $ modifyMVar_ (navAxes ^. l) $ return . (velocity .~ v)
 
     relAxisToLens :: RelAxis -> Maybe (ReifiedLens' (V3 a) a)
     relAxisToLens ax
@@ -108,7 +108,7 @@ main = do
             putStrLn $ "Move "++show axis++" to "++show n
 
     zMotor <- Z.open "/dev/ttyACM0"
-    let moveZStage (Pos n) = Z.move zMotor (n `div` 10)
+    let moveZStage (Pos n) = Z.move zMotor n >> putStrLn ("hi"++show n)
 
     forkIO $ forever $ threadDelay 1000000 >> enqueue reportPositions
     navAxes <- T.sequence $ V3
