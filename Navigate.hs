@@ -34,13 +34,17 @@ newNavAxis updateRate move initial = do
               let dx = round $ dt * na ^. velocity
                   na' = na & position %~ (+dx)
                   pos = na' ^. position
-              when (lastPos /= pos) $ move pos >> putStrLn ("Move "++show pos)
+              when (lastPos /= pos) $ move pos
               return (na', na')
             update ref (na' ^. position)
 
-runMotorQueue :: TQueue (MM.Bus -> IO ()) -> MM.Bus -> IO ()
-runMotorQueue queue bus = forever $ atomically (readTQueue queue) >>= ($ bus)
-    
+newMotorQueue :: FilePath -> IO (TQueue (MM.Bus -> IO ()))
+newMotorQueue device = do
+    bus <- MM.open "/dev/ttyUSB4"
+    queue <- newTQueueIO
+    forkIO $ forever $ atomically (readTQueue queue) >>= ($ bus)
+    return queue
+ 
 listenEvDev :: Handle -> V3 (MVar NavAxis) -> IO ()
 listenEvDev h navAxes = forever $ hReadEvent h >>= maybe (return ()) handleEvent
   where
@@ -61,28 +65,30 @@ listenEvDev h navAxes = forever $ hReadEvent h >>= maybe (return ()) handleEvent
    
 valueToVelocity :: Int32 -> Double
 valueToVelocity v
-  | v < thresh  = 0
-  | otherwise   = 100 * realToFrac (v - min)
+  | abs v < thresh  = 0
+  | otherwise       = gain * realToFrac (signum v * (abs v - thresh))
   where thresh = 20
+        gain = 50
            
 updateRate = 30 
 
 main :: IO ()
 main = do
-    bus <- MM.open "/dev/ttyUSB4"
-    MM.select bus (MM.Axis 1)
-    MM.setMotorPower bus True
-    motorQueue <- newTQueueIO
-    forkIO $ runMotorQueue motorQueue bus
-    let moveStage :: MM.Axis -> Position -> IO ()
-        moveStage axis (Pos n) = MM.select bus axis >> MM.moveAbs bus (MM.Pos $ fromIntegral n)
+    queue <- newMotorQueue "/dev/ttyUSB4"
+    let enqueue :: (MM.Bus -> IO ()) -> IO ()
+        enqueue = atomically . writeTQueue queue
+    enqueue $ \bus->MM.select bus (MM.Axis 1) >> MM.setMotorPower bus True
+    let moveStage :: MM.Axis -> Position -> MM.Bus -> IO ()
+        moveStage axis (Pos n) bus = do
+            MM.select bus axis
+            MM.moveAbs bus (MM.Pos $ fromIntegral n)
 
+    forkIO $ forever $ threadDelay 1000000 >> enqueue (\bus->MM.getPosition bus >>= print)
     navAxes <- T.sequence $ V3
-                 (newNavAxis updateRate (moveStage $ MM.Axis 0) 0)
-                 (newNavAxis updateRate (moveStage $ MM.Axis 1) 0)
+                 (newNavAxis updateRate (enqueue . moveStage (MM.Axis 0)) 0)
+                 (newNavAxis updateRate (enqueue . moveStage (MM.Axis 1)) 0)
                  (newNavAxis updateRate (const $ return ()) 0)
 
     joystick <- openFile "/dev/input/event4" ReadMode
     listenEvDev joystick navAxes
-    MM.setMotorPower bus False
 
