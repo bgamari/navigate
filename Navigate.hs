@@ -9,7 +9,7 @@ import Control.Applicative
 import Data.Int
 import Linear
 import Control.Monad (forever)
-import Control.Monad.State
+import Control.Monad.State.Strict
 import Data.Traversable as T
 import Data.Foldable as F
 
