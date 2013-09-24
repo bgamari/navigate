@@ -49,15 +49,22 @@ newMotorQueue device = do
     return queue
  
 listenEvDev :: Handle -> V3 (MVar NavAxis) -> IO ()
-listenEvDev h navAxes = forever $ hReadEvent h >>= maybe (return ()) handleEvent
+listenEvDev h navAxes =
+    void $ flip evalStateT (pure 0) $ forever
+    $ lift (hReadEvent h) >>= maybe (return ()) handleEvent
   where
-    handleEvent :: Event -> IO ()
+    handleEvent :: Event -> StateT (V3 Int32) IO ()
     handleEvent event@(RelEvent {}) = do
         case relAxisToLens (evRelAxis event) of
-          Just l  -> modifyMVar_ (navAxes ^. reflectLens l) (return . (velocity .~ v))
+          Just l  -> do reflectLens l .= evValue event
+                        update
           Nothing -> return ()
-        where v = valueToVelocity (evValue event)
     handleEvent _ = return ()
+  
+    update :: StateT (V3 Int32) IO ()
+    update = void $ T.sequence $ core $ \l->do
+        v <- uses l realToFrac
+        lift $ modifyMVar_ (navAxes ^. l) (return . (velocity .~ v))
 
     relAxisToLens :: RelAxis -> Maybe (ReifiedLens' (V3 a) a)
     relAxisToLens ax
@@ -66,12 +73,14 @@ listenEvDev h navAxes = forever $ hReadEvent h >>= maybe (return ()) handleEvent
       | ax == rel_z   = Just $ ReifyLens _z
       | otherwise     = Nothing
    
-valueToVelocity :: Int32 -> Double
+valueToVelocity :: V3 Int32 -> V3 Double
 valueToVelocity v
-  | abs v < thresh  = 0
-  | otherwise       = gain * realToFrac (signum v) * (realToFrac $ abs v - thresh)**1.4
+  | norm v' < thresh = 0
+  | otherwise        = gain * (norm v' - thresh)**1.4 *^ vhat
   where thresh = 30
         gain = 1
+        v' = fmap realToFrac v
+        vhat = normalize v'
            
 updateRate = 30
 
