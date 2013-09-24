@@ -12,6 +12,7 @@ import qualified MercuryController as MM
 import Control.Monad (forever)
 import Control.Monad.State
 import Data.Traversable as T
+import Data.Foldable as F
 
 newtype Position = Pos Int
                  deriving (Show, Eq, Ord, Num, Integral, Real, Enum)
@@ -22,7 +23,9 @@ data NavAxis = NavAxis { _position :: Position
              deriving (Show, Eq)
 makeLenses ''NavAxis
 
-newNavAxis :: Int -> (Position -> IO ()) -> Position -> IO (MVar NavAxis)
+type Mover = Position -> IO ()
+
+newNavAxis :: Int -> Mover -> Position -> IO (MVar NavAxis)
 newNavAxis updateRate move initial = do
     ref <- newMVar $ NavAxis initial 0
     forkIO $ forever $ update ref initial
@@ -66,29 +69,45 @@ listenEvDev h navAxes = forever $ hReadEvent h >>= maybe (return ()) handleEvent
 valueToVelocity :: Int32 -> Double
 valueToVelocity v
   | abs v < thresh  = 0
-  | otherwise       = gain * realToFrac (signum v * (abs v - thresh))
-  where thresh = 20
-        gain = 50
+  | otherwise       = gain * realToFrac (signum v) * (realToFrac $ abs v - thresh)**1.4
+  where thresh = 30
+        gain = 1
            
-updateRate = 30 
+updateRate = 30
+
+axes = V2 (MM.Axis 0) (MM.Axis 1) 
 
 main :: IO ()
 main = do
     queue <- newMotorQueue "/dev/ttyUSB4"
     let enqueue :: (MM.Bus -> IO ()) -> IO ()
         enqueue = atomically . writeTQueue queue
-    enqueue $ \bus->MM.select bus (MM.Axis 1) >> MM.setMotorPower bus True
-    let moveStage :: MM.Axis -> Position -> MM.Bus -> IO ()
-        moveStage axis (Pos n) bus = do
+    initialVar <- newEmptyMVar
+    enqueue $ \bus->do
+        initialPos <- T.forM axes $ \axis->do
+            MM.select bus axis
+            MM.setMotorPower bus True
+            either (error "Error fetching initial position") fromIntegral <$> MM.getPosition bus
+        putMVar initialVar initialPos
+    initial <- takeMVar initialVar
+    let moveStage :: MM.Axis -> Mover
+        moveStage axis (Pos n) = enqueue $ \bus->do
             MM.select bus axis
             MM.moveAbs bus (MM.Pos $ fromIntegral n)
+            putStrLn $ "Move "++show axis++" to "++show n
 
-    forkIO $ forever $ threadDelay 1000000 >> enqueue (\bus->MM.getPosition bus >>= print)
+    forkIO $ forever $ threadDelay 1000000 >> enqueue reportPositions
     navAxes <- T.sequence $ V3
-                 (newNavAxis updateRate (enqueue . moveStage (MM.Axis 0)) 0)
-                 (newNavAxis updateRate (enqueue . moveStage (MM.Axis 1)) 0)
+                 (newNavAxis updateRate (moveStage (axes ^. _x)) (initial ^. _x))
+                 (newNavAxis updateRate (moveStage (axes ^. _y)) (initial ^. _y))
                  (newNavAxis updateRate (const $ return ()) 0)
 
     joystick <- openFile "/dev/input/event4" ReadMode
     listenEvDev joystick navAxes
 
+reportPositions :: MM.Bus -> IO ()
+reportPositions bus = F.forM_ axes $ \axis->do
+    MM.select bus axis
+    p <- MM.getPosition bus
+    putStrLn $ show axis++" is "++show p
+    

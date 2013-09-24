@@ -41,9 +41,7 @@ select (Bus dev) (Axis n) =
     void $ send dev $ BS.singleton '\01' <> BS.singleton (chr $ 48+n)
 
 sendCmd :: Bus -> ByteString -> IO () 
-sendCmd (Bus dev) c = do
-  void $ send dev $ c <> BS.singleton '\r'
-  print c
+sendCmd (Bus dev) c = void $ send dev $ c <> BS.singleton '\r'
 
 readReport :: Bus -> IO ByteString
 readReport (Bus dev) = go BS.empty
