@@ -108,9 +108,9 @@ main = do
             putStrLn $ "Move "++show axis++" to "++show n
 
     zMotor <- Z.open "/dev/ttyACM0"
-    let moveZStage (Pos n) = Z.move zMotor n >> putStrLn ("hi"++show n)
+    let moveZStage (Pos n) = Z.move zMotor n
 
-    forkIO $ forever $ threadDelay 1000000 >> enqueue reportPositions
+    --forkIO $ forever $ threadDelay 1000000 >> enqueue reportPositions
     navAxes <- T.sequence $ V3
                  (newNavAxis updateRate (moveStage (axes ^. _x)) (initial ^. _x))
                  (newNavAxis updateRate (moveStage (axes ^. _y)) (initial ^. _y))

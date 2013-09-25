@@ -17,6 +17,8 @@ open fname = do
     settings = defaultSerialSettings { commSpeed = CS115200 }
     
 move :: ZMotor -> Int -> IO ()
-move (ZMotor dev) pos =
-    void $ send dev $ BS.pack $ "move "++show pos++"\n"
+move (ZMotor dev) pos = do
+    send dev $ BS.pack $ "move "++show pos++"\n"
+    flush dev
+    return ()
 
