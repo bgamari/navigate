@@ -7,6 +7,7 @@ import Control.Concurrent
 import Control.Lens
 import Control.Applicative
 import Data.Int
+import Data.Functor.Rep
 import Linear
 import Control.Monad (forever)
 import Control.Monad.State.Strict
@@ -58,21 +59,22 @@ listenEvDev h navAxes =
     handleEvent :: Event -> StateT (V3 Int32) IO ()
     handleEvent event@(RelEvent {}) = do
         case relAxisToLens (evRelAxis event) of
-          Just l  -> do reflectLens l .= evValue event
+          Just l  -> do runLens l .= evValue event
                         update
           Nothing -> return ()
     handleEvent _ = return ()
   
+    tabulateV3 = tabulate :: (E V3 -> a) -> V3 a
     update :: StateT (V3 Int32) IO ()
-    update = void $ T.sequence $ core $ \l->do
+    update = void $ T.sequence $ tabulateV3 $ \(E l)->do
         v <- uses l realToFrac
         lift $ modifyMVar_ (navAxes ^. l) $ return . (velocity .~ v)
 
     relAxisToLens :: RelAxis -> Maybe (ReifiedLens' (V3 a) a)
     relAxisToLens ax
-      | ax == rel_x   = Just $ ReifyLens _x
-      | ax == rel_y   = Just $ ReifyLens _y
-      | ax == rel_z   = Just $ ReifyLens _z
+      | ax == rel_x   = Just $ Lens _x
+      | ax == rel_y   = Just $ Lens _y
+      | ax == rel_z   = Just $ Lens _z
       | otherwise     = Nothing
    
 valueToVelocity :: V3 Int32 -> V3 Double
@@ -116,7 +118,7 @@ main = do
                  (newNavAxis updateRate (moveStage (axes ^. _y)) (initial ^. _y))
                  (newNavAxis updateRate  moveZStage               0)
 
-    joystick <- openFile "/dev/input/event4" ReadMode
+    joystick <- openFile "/dev/input/event10" ReadMode
     listenEvDev joystick navAxes
 
 reportPositions :: MM.Bus -> IO ()
