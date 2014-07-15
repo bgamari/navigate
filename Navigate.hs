@@ -109,8 +109,10 @@ main = do
             MM.moveAbs bus (MM.Pos $ fromIntegral n)
             putStrLn $ "Move "++show axis++" to "++show n
 
-    zMotor <- Z.open "/dev/ttyACM0"
-    let moveZStage (Pos n) = Z.move zMotor n
+    zMotor <- Z.open "/dev/ttyACM1"
+    let moveZStage (Pos n) = do
+            Z.move zMotor n
+            putStrLn $ "Move Z to "++show n
 
     --forkIO $ forever $ threadDelay 1000000 >> enqueue reportPositions
     navAxes <- T.sequence $ V3
@@ -118,7 +120,7 @@ main = do
                  (newNavAxis updateRate (moveStage (axes ^. _y)) (initial ^. _y))
                  (newNavAxis updateRate  moveZStage               0)
 
-    joystick <- openFile "/dev/input/event10" ReadMode
+    joystick <- openFile "/dev/input/event4" ReadMode
     listenEvDev joystick navAxes
 
 reportPositions :: MM.Bus -> IO ()
