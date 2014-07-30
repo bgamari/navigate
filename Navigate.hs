@@ -14,8 +14,23 @@ import Control.Monad.State.Strict
 import Data.Traversable as T
 import Data.Foldable as F
 
+import Data.Monoid
+import Options.Applicative hiding ((&))
+
 import qualified MercuryController as MM
 import qualified ZMotor as Z
+
+data Config = Config { xyDevice :: FilePath
+                     , zDevice  :: FilePath
+                     }
+
+config = Config
+    <$> strOption ( long "xy" <> metavar "DEVICE"
+                    <> value "/dev/ttyUSB4"
+                    <> help "XY stepper device path")
+    <*> strOption ( long "z" <> metavar "DEVICE"
+                    <> value "/dev/ttyACM1"
+                    <> help "Z stepper device path")
 
 newtype Position = Pos Int
                  deriving (Show, Eq, Ord, Num, Integral, Real, Enum)
@@ -46,11 +61,11 @@ newNavAxis updateRate move initial = do
 
 newMotorQueue :: FilePath -> IO (TQueue (MM.Bus -> IO ()))
 newMotorQueue device = do
-    bus <- MM.open "/dev/ttyUSB4"
+    bus <- MM.open device
     queue <- newTQueueIO
     forkIO $ forever $ atomically (readTQueue queue) >>= ($ bus)
     return queue
- 
+
 listenEvDev :: Handle -> V3 (MVar NavAxis) -> IO ()
 listenEvDev h navAxes =
     void $ flip evalStateT (pure 0) $ forever
@@ -63,7 +78,7 @@ listenEvDev h navAxes =
                         update
           Nothing -> return ()
     handleEvent _ = return ()
-  
+
     tabulateV3 = tabulate :: (E V3 -> a) -> V3 a
     update :: StateT (V3 Int32) IO ()
     update = void $ T.sequence $ tabulateV3 $ \(E l)->do
@@ -76,7 +91,7 @@ listenEvDev h navAxes =
       | ax == rel_y   = Just $ Lens _y
       | ax == rel_z   = Just $ Lens _z
       | otherwise     = Nothing
-   
+
 valueToVelocity :: V3 Int32 -> V3 Double
 valueToVelocity v
   | norm v' < thresh = 0
@@ -85,14 +100,15 @@ valueToVelocity v
         gain = 1
         v' = fmap realToFrac v
         vhat = normalize v'
-           
+
 updateRate = 30
 
-axes = V2 (MM.Axis 0) (MM.Axis 1) 
+axes = V2 (MM.Axis 0) (MM.Axis 1)
 
 main :: IO ()
 main = do
-    queue <- newMotorQueue "/dev/ttyUSB4"
+    args <- execParser $ info (helper <*> config) mempty
+    queue <- newMotorQueue (xyDevice args)
     let enqueue :: (MM.Bus -> IO ()) -> IO ()
         enqueue = atomically . writeTQueue queue
     initialVar <- newEmptyMVar
@@ -109,7 +125,7 @@ main = do
             MM.moveAbs bus (MM.Pos $ fromIntegral n)
             putStrLn $ "Move "++show axis++" to "++show n
 
-    zMotor <- Z.open "/dev/ttyACM1"
+    zMotor <- Z.open (zDevice args)
     let moveZStage (Pos n) = do
             Z.move zMotor n
             putStrLn $ "Move Z to "++show n
@@ -128,4 +144,3 @@ reportPositions bus = F.forM_ axes $ \axis->do
     MM.select bus axis
     p <- MM.getPosition bus
     putStrLn $ show axis++" is "++show p
-    
