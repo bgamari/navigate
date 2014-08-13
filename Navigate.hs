@@ -112,6 +112,8 @@ axes = V2 (MM.Axis 0) (MM.Axis 1)
 main :: IO ()
 main = do
     args <- execParser $ info (helper <*> config) mempty
+
+    putStrLn "Opening XY stage"
     queue <- newMotorQueue (xyDevice args)
     let enqueue :: (MM.Bus -> IO ()) -> IO ()
         enqueue = atomically . writeTQueue queue
@@ -129,6 +131,7 @@ main = do
             MM.moveAbs bus (MM.Pos $ fromIntegral n)
             putStrLn $ "Move "++show axis++" to "++show n
 
+    putStrLn "Opening Z stage"
     zMotor <- Z.open (zDevice args)
     let moveZStage (Pos n) = do
             Z.move zMotor n
@@ -140,6 +143,7 @@ main = do
                  (newNavAxis updateRate (moveStage (axes ^. _y)) (initial ^. _y))
                  (newNavAxis updateRate  moveZStage               0)
 
+    putStrLn "Opening joystick"
     joystick <- openFile (inputDevice args) ReadMode
     listenEvDev joystick navAxes
 
