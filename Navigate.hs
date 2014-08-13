@@ -22,6 +22,7 @@ import qualified ZMotor as Z
 
 data Config = Config { xyDevice :: FilePath
                      , zDevice  :: FilePath
+                     , inputDevice :: FilePath
                      }
 
 config = Config
@@ -31,6 +32,9 @@ config = Config
     <*> strOption ( long "z" <> metavar "DEVICE"
                     <> value "/dev/ttyACM.zstage"
                     <> help "Z stepper device path")
+    <*> strOption ( long "input" <> metavar "DEVICE"
+                    <> value "/dev/input/event4"
+                    <> help "Joystick input device")
 
 newtype Position = Pos Int
                  deriving (Show, Eq, Ord, Num, Integral, Real, Enum)
@@ -136,7 +140,7 @@ main = do
                  (newNavAxis updateRate (moveStage (axes ^. _y)) (initial ^. _y))
                  (newNavAxis updateRate  moveZStage               0)
 
-    joystick <- openFile "/dev/input/event4" ReadMode
+    joystick <- openFile (inputDevice args) ReadMode
     listenEvDev joystick navAxes
 
 reportPositions :: MM.Bus -> IO ()
