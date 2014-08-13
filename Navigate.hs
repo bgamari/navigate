@@ -26,10 +26,10 @@ data Config = Config { xyDevice :: FilePath
 
 config = Config
     <$> strOption ( long "xy" <> metavar "DEVICE"
-                    <> value "/dev/ttyUSB4"
+                    <> value "/dev/ttyUSB.stage"
                     <> help "XY stepper device path")
     <*> strOption ( long "z" <> metavar "DEVICE"
-                    <> value "/dev/ttyACM1"
+                    <> value "/dev/ttyACM.zstage"
                     <> help "Z stepper device path")
 
 newtype Position = Pos Int
