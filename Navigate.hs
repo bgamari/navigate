@@ -30,7 +30,7 @@ config = Config
                     <> value "/dev/ttyUSB.stage"
                     <> help "XY stepper device path")
     <*> strOption ( long "z" <> metavar "DEVICE"
-                    <> value "/dev/ttyACM.zstage"
+                    <> value "/dev/ttyUSB.zstage"
                     <> help "Z stepper device path")
     <*> strOption ( long "input" <> metavar "DEVICE"
                     <> value "/dev/input/event4"
