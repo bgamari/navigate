@@ -11,6 +11,9 @@ module MercuryController ( -- * Interacting with the bus
                          , moveAbs
                          , setBrake
                          , setMotorPower
+                           -- * Motor drive parameters
+                         , setHoldCurrent
+                         , setDriveCurrent
                            -- * Status
                          , getPosition
                          ) where
@@ -61,6 +64,12 @@ setBrake bus False = sendCmd bus "BF"
 setMotorPower :: Bus -> Bool -> IO ()
 setMotorPower bus True = sendCmd bus "MN"
 setMotorPower bus False = sendCmd bus "MF"
+
+setDriveCurrent :: Bus -> Int -> IO ()
+setDriveCurrent bus cur = sendCmd bus (BS.pack $ "DC"++show cur)
+
+setHoldCurrent :: Bus -> Int -> IO ()
+setHoldCurrent bus cur = sendCmd bus (BS.pack $ "HC"++show cur)
          
 getPosition :: Bus -> IO (Either String Position)
 getPosition bus = runEitherT $ do

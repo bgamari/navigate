@@ -23,6 +23,8 @@ import qualified ZMotor as Z
 data Config = Config { xyDevice :: FilePath
                      , zDevice  :: FilePath
                      , inputDevice :: FilePath
+                     , driveCurrent :: Int
+                     , holdCurrent :: Int
                      }
 
 config = Config
@@ -35,6 +37,13 @@ config = Config
     <*> strOption ( long "input" <> metavar "DEVICE"
                     <> value "/dev/input/event4"
                     <> help "Joystick input device")
+    <*> option ( long "drive-current" <> metavar "MA"
+               <> value 350
+               <> help "Motor drive current")
+    <*> option ( long "hold-current" <> metavar "MA"
+
+              <> value 350
+              <> help "Motor drive current")
 
 newtype Position = Pos Int
                  deriving (Show, Eq, Ord, Num, Integral, Real, Enum)
@@ -121,6 +130,9 @@ main = do
     enqueue $ \bus->do
         initialPos <- T.forM axes $ \axis->do
             MM.select bus axis
+            MM.setBrake bus False
+            MM.setDriveCurrent bus (driveCurrent args)
+            MM.setHoldCurrent bus (holdCurrent args)
             MM.setMotorPower bus True
             either (error "Error fetching initial position") fromIntegral <$> MM.getPosition bus
         putMVar initialVar initialPos
