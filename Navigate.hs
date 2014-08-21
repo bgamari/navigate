@@ -27,6 +27,9 @@ data Config = Config { xyDevice :: FilePath
                      , holdCurrent :: Int
                      }
 
+axisNames :: V3 String
+axisNames = V3 "x" "y" "z"
+
 config = Config
     <$> strOption ( long "xy" <> metavar "DEVICE"
                     <> value "/dev/ttyUSB.stage"
@@ -79,30 +82,55 @@ newMotorQueue device = do
     forkIO $ forever $ atomically (readTQueue queue) >>= ($ bus)
     return queue
 
+data JoystickState = JSS { _jssPosition    :: V3 Int32
+                         , _jssEnabled     :: V3 Bool
+                         , _jssCurrentAxis :: [E V3]
+                         }
+makeLenses ''JoystickState
+
 listenEvDev :: Handle -> V3 (MVar NavAxis) -> IO ()
 listenEvDev h navAxes =
-    void $ flip evalStateT (pure 0) $ forever
+    void $ flip evalStateT s0 $ forever
     $ lift (hReadEvent h) >>= maybe (return ()) handleEvent
   where
-    handleEvent :: Event -> StateT (V3 Int32) IO ()
+    s0 = JSS { _jssPosition = pure 0
+             , _jssEnabled = pure True
+             , _jssCurrentAxis = cycle [ex, ey, ez]
+             }
+    handleEvent :: Event -> StateT JoystickState IO ()
+    handleEvent (KeyEvent {evKeyCode=key, evKeyEventType=Released})
+      | key == btn_0 = do
+        curAxis:_ <- use jssCurrentAxis
+        jssEnabled . el curAxis %= not
+        en <- use jssEnabled
+        when (not $ en ^. el curAxis) $ do
+            jssPosition . el curAxis .= 0
+        lift $ putStrLn $ "Enabled axes: "++show en
+      | key == btn_1 = do
+        jssCurrentAxis %= tail
+        axis:_ <- use jssCurrentAxis
+        lift $ putStrLn $ "Selected axis: "++(axisNames ^. el axis)
     handleEvent event@(RelEvent {}) = do
         case relAxisToLens (evRelAxis event) of
-          Just l  -> do runLens l .= evValue event
-                        update
+          Just l  -> do
+              enabled <- use $ jssEnabled . el l
+              when enabled $ do
+                  jssPosition . el l .= evValue event
+                  update
           Nothing -> return ()
     handleEvent _ = return ()
 
     tabulateV3 = tabulate :: (E V3 -> a) -> V3 a
-    update :: StateT (V3 Int32) IO ()
+    update :: StateT JoystickState IO ()
     update = void $ T.sequence $ tabulateV3 $ \(E l)->do
-        v <- uses l realToFrac
+        v <- uses (jssPosition . l) realToFrac
         lift $ modifyMVar_ (navAxes ^. l) $ return . (velocity .~ v)
 
-    relAxisToLens :: RelAxis -> Maybe (ReifiedLens' (V3 a) a)
+    relAxisToLens :: RelAxis -> Maybe (E V3)
     relAxisToLens ax
-      | ax == rel_x   = Just $ Lens _x
-      | ax == rel_y   = Just $ Lens _y
-      | ax == rel_z   = Just $ Lens _z
+      | ax == rel_x   = Just ex
+      | ax == rel_y   = Just ey
+      | ax == rel_z   = Just ez
       | otherwise     = Nothing
 
 valueToVelocity :: V3 Int32 -> V3 Double
