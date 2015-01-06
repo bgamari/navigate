@@ -40,13 +40,12 @@ config = Config
     <*> strOption ( long "input" <> metavar "DEVICE"
                     <> value "/dev/input/event4"
                     <> help "Joystick input device")
-    <*> option ( long "drive-current" <> metavar "MA"
-               <> value 350
-               <> help "Motor drive current")
-    <*> option ( long "hold-current" <> metavar "MA"
-
-              <> value 350
-              <> help "Motor drive current")
+    <*> option auto ( long "drive-current" <> metavar "MA"
+                      <> value 350
+                      <> help "Motor drive current")
+    <*> option auto ( long "hold-current" <> metavar "MA"
+                      <> value 350
+                      <> help "Motor drive current")
 
 newtype Position = Pos Int
                  deriving (Show, Eq, Ord, Num, Integral, Real, Enum)
