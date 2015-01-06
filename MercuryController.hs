@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings, GeneralizedNewtypeDeriving #-}
-                
+
 module MercuryController ( -- * Interacting with the bus
                            Bus
                          , open
@@ -16,6 +16,8 @@ module MercuryController ( -- * Interacting with the bus
                          , setDriveCurrent
                            -- * Status
                          , getPosition
+                         , getError
+                         , Error(..)
                          ) where
 
 import Data.List
@@ -43,7 +45,7 @@ select :: Bus -> Axis -> IO ()
 select (Bus dev) (Axis n) =
     void $ send dev $ BS.singleton '\01' <> BS.singleton (chr $ 48+n)
 
-sendCmd :: Bus -> ByteString -> IO () 
+sendCmd :: Bus -> ByteString -> IO ()
 sendCmd (Bus dev) c = void $ send dev $ c <> BS.singleton '\r'
 
 readReport :: Bus -> IO ByteString
@@ -56,7 +58,7 @@ newtype Position = Pos Int32 deriving (Show, Eq, Ord, Num, Integral, Real, Enum,
 moveAbs :: Bus -> Position -> IO ()
 moveAbs bus (Pos n) = do
     sendCmd bus $ "MA"<>BS.pack (show n)
-    
+
 setBrake :: Bus -> Bool -> IO ()
 setBrake bus True = sendCmd bus "BN"
 setBrake bus False = sendCmd bus "BF"
@@ -70,7 +72,7 @@ setDriveCurrent bus cur = sendCmd bus (BS.pack $ "DC"++show cur)
 
 setHoldCurrent :: Bus -> Int -> IO ()
 setHoldCurrent bus cur = sendCmd bus (BS.pack $ "HC"++show cur)
-         
+
 getPosition :: Bus -> IO (Either String Position)
 getPosition bus = runEitherT $ do
     lift $ sendCmd bus "TP"
@@ -79,3 +81,60 @@ getPosition bus = runEitherT $ do
       Just s  -> let stripped = (fromMaybe s $ stripPrefix "+" s)
                  in Pos <$> tryRead ("getPosition: Unable to parse: "<>show s) stripped
       Nothing -> left "getPosition: Invalid report format"
+
+data Error = ParameterSyntaxErr
+           | UnknownCmdErr
+           | UnallowableMoveErr
+           | PositionOutOfLimitsErr
+           | VelocityOutOfLimitsErr
+           | ControllerStoppedErr
+           | InvalidAxisErr
+           | UnknownStageNameErr
+           | ParameterOutOfRangeErr
+           | InvalidMacroNameErr
+           | RecordingMacroErr
+           | MacroNotFoundErr
+           | AxisIdMoreThanOnceErr
+           | IllegalAxisErr
+           | IncorrectNumParametersErr
+           | InvalidFloatErr
+           | ParameterMissingErr
+           | CmdNotAllowedForStageErr
+           | UnknownParameterErr
+           | UnknownAxisIdErr
+           | OtherErr Int
+           deriving (Show, Eq, Ord)
+
+getError :: Bus -> IO (Either String (Maybe Error))
+getError bus = runEitherT $ do
+    lift $ sendCmd bus "ERR?"
+    r <- lift $ readReport bus
+    code <- tryRead "Failed to parse response" $ BS.unpack r
+    return $ case code of
+                 0 -> Nothing
+                 n -> Just $ toError n
+  where
+    toError :: Int -> Error
+    toError n =
+        case n of
+          1  -> ParameterSyntaxErr
+          2  -> UnknownCmdErr
+          5  -> UnallowableMoveErr
+          7  -> PositionOutOfLimitsErr
+          8  -> VelocityOutOfLimitsErr
+          10 -> ControllerStoppedErr
+          15 -> InvalidAxisErr
+          16 -> UnknownStageNameErr
+          17 -> ParameterOutOfRangeErr
+          18 -> InvalidMacroNameErr
+          19 -> RecordingMacroErr
+          20 -> MacroNotFoundErr
+          22 -> AxisIdMoreThanOnceErr
+          23 -> IllegalAxisErr
+          24 -> IncorrectNumParametersErr
+          25 -> InvalidFloatErr
+          26 -> ParameterMissingErr
+          34 -> CmdNotAllowedForStageErr
+          54 -> UnknownParameterErr
+          (-1001) -> UnknownAxisIdErr
+          n  -> OtherErr n
