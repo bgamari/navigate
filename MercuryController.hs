@@ -50,10 +50,13 @@ sendCmd (Bus dev) c = void $ send dev $ c <> BS.singleton '\r'
 
 readReport :: Bus -> IO ByteString
 readReport (Bus dev) = go BS.empty
-  where go a | "\13\10\03" `BS.isSuffixOf` a = return $ BS.take (BS.length a - 3) a
-        go a = (a <>) <$> recv dev 1 >>= go
+  where
+    go a
+      | "\13\10\03" `BS.isSuffixOf` a = return $ BS.take (BS.length a - 3) a
+      | otherwise                     = (a <>) <$> recv dev 1 >>= go
 
-newtype Position = Pos Int32 deriving (Show, Eq, Ord, Num, Integral, Real, Enum, Bounded)
+newtype Position = Pos Int32
+                 deriving (Show, Eq, Ord, Num, Integral, Real, Enum, Bounded)
 
 moveAbs :: Bus -> Position -> IO ()
 moveAbs bus (Pos n) = do
