@@ -158,7 +158,7 @@ main = do
     enqueue $ \bus->do
         initialPos <- T.forM axes $ \axis->do
             MM.select bus axis
-            MM.getError bus >>= print
+            --MM.getError bus >>= print
             MM.setBrake bus False
             MM.setDriveCurrent bus (driveCurrent args)
             MM.setHoldCurrent bus (holdCurrent args)
