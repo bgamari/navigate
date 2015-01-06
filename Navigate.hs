@@ -153,10 +153,12 @@ main = do
     queue <- newMotorQueue (xyDevice args)
     let enqueue :: (MM.Bus -> IO ()) -> IO ()
         enqueue = atomically . writeTQueue queue
+
     initialVar <- newEmptyMVar
     enqueue $ \bus->do
         initialPos <- T.forM axes $ \axis->do
             MM.select bus axis
+            MM.getError bus >>= print
             MM.setBrake bus False
             MM.setDriveCurrent bus (driveCurrent args)
             MM.setHoldCurrent bus (holdCurrent args)
